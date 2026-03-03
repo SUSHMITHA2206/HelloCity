@@ -115,6 +115,12 @@ function App() {
           role: "assistant",
           text: data.assistantMessage,
         });
+      } else if (res.ok) {
+        nextMessages.push({
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          text: "Got it — try again in a moment, or tell me something else you're into!",
+        });
       }
 
       setMessages((prev) => [...prev, ...nextMessages]);
@@ -163,9 +169,19 @@ function App() {
       <div className="hc-shell">
         <header className="hc-header">
           <div className="hc-brand">
-            <div className="hc-logo-circle">H</div>
+            <div className="hc-logo-icon" aria-hidden>
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="64" height="64" rx="14" fill="var(--hc-yellow)" />
+                <path d="M 18 42 Q 32 54 46 42" stroke="#000" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="24" cy="30" r="5" fill="#000" />
+                <polygon points="40,24 40,40 52,32" fill="#FFFFFF" />
+              </svg>
+            </div>
             <div>
-              <div className="hc-logo-text">HelloCity</div>
+              <div className="hc-logo-text">
+                <span className="hc-logo-hello">Hello</span>
+                <span className="hc-logo-city">City</span>
+              </div>
               <div className="hc-logo-subtitle">{headerSubtitle}</div>
             </div>
           </div>
@@ -285,8 +301,15 @@ function App() {
             type="submit"
             className="hc-send-button"
             disabled={!input.trim() || isLoading || !!completedProfile}
+            aria-label="Send"
           >
-            {isLoading ? "…" : "Send"}
+            {isLoading ? (
+              "…"
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="hc-send-arrow">
+                <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" fill="#000000" />
+              </svg>
+            )}
           </button>
           )}
         </form>

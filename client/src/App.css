@@ -1,12 +1,20 @@
+:root {
+  --hc-yellow: #F5D000;
+  /* Slightly brighter on black so it matches header yellow perceptually */
+  --hc-yellow-on-dark: #FFE033;
+}
+
 .hc-root {
   min-height: 100vh;
-  background: #fefaf5;
+  background: #f5f5f5;
   padding: 12px;
   display: flex;
   justify-content: center;
   align-items: stretch;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 
 .hc-shell {
@@ -14,7 +22,7 @@
   max-width: 480px;
   background: #ffffff;
   border-radius: 24px;
-  box-shadow: 0 16px 40px rgba(28, 25, 23, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -22,9 +30,10 @@
 
 .hc-header {
   padding: 14px 16px 10px;
-  border-bottom: 1px solid rgba(254, 215, 170, 0.6);
-  background: linear-gradient(120deg, #ff8ab6, #ffb278, #ffd46b);
-  color: #1c1917;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--hc-yellow);
+  color: #000000;
+  font-size: 15px;
 }
 
 .hc-brand {
@@ -37,23 +46,56 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #1c1917;
-  color: #fef7ed;
-  font-size: 18px;
+  background: #000000;
+  color: var(--hc-yellow);
+  font-size: 17px;
   font-weight: 700;
+  font-family: "Inter", sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.hc-logo-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.hc-logo-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .hc-logo-text {
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
+  font-family: "Inter", sans-serif;
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+}
+
+.hc-logo-hello {
+  color: #000000;
+}
+
+.hc-logo-city {
+  color: var(--hc-yellow);
 }
 
 .hc-logo-subtitle {
   font-size: 12px;
-  color: rgba(28, 25, 23, 0.85);
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.8);
+  font-family: "Inter", sans-serif;
 }
 
 .hc-main {
@@ -68,7 +110,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #fefaf5;
+  background: #ffffff;
 }
 
 .hc-message-row {
@@ -92,59 +134,65 @@
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: #1c1917;
-  color: #fef7ed;
-  font-size: 14px;
-  font-weight: 600;
+  background: #000000;
+  color: var(--hc-yellow);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: "Inter", sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 6px 14px rgba(28, 25, 23, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .hc-bubble {
   padding: 10px 12px;
   border-radius: 16px;
   max-width: 78%;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.45;
   word-wrap: break-word;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-bubble-assistant {
-  background: #fff7ed;
+  background: var(--hc-yellow);
   border-bottom-left-radius: 4px;
-  border: 1px solid rgba(251, 146, 60, 0.35);
-  color: #1c1917;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #000000;
 }
 
 .hc-bubble-user {
-  background: #e8e4df;
-  color: #1c1917;
+  background: #e8e8e8;
+  color: #000000;
   border-bottom-right-radius: 4px;
 }
 
 .hc-bubble-system {
-  background: #fef2f2;
-  color: #991b1b;
+  background: #fff3cd;
+  color: #856404;
   border-radius: 999px;
   padding-inline: 16px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .hc-examples-section {
   margin-top: 8px;
   padding: 10px 8px 8px;
-  background: #fff7ed;
+  background: #fffef5;
   border-radius: 18px;
-  border: 1px solid rgba(251, 146, 60, 0.3);
+  border: 1px solid rgba(245, 208, 0, 0.4);
 }
 
 .hc-section-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #1c1917;
+  color: #000000;
   margin-bottom: 8px;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-examples-grid {
@@ -158,15 +206,15 @@
   gap: 8px;
   padding: 8px;
   border-radius: 14px;
-  background: #fefaf5;
-  border: 1px solid rgba(251, 146, 60, 0.25);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .hc-example-image {
   width: 56px;
   height: 56px;
   border-radius: 12px;
-  background: #fff7ed;
+  background: #f0f0f0;
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -184,28 +232,36 @@
 }
 
 .hc-example-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   margin: 0;
-  color: #1c1917;
+  color: #000000;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-example-meta {
-  font-size: 12px;
-  color: #57534e;
+  font-size: 13px;
+  font-weight: 400;
+  color: #444;
   margin: 0;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-example-description {
-  font-size: 12px;
-  color: #57534e;
+  font-size: 13px;
+  font-weight: 400;
+  color: #444;
   margin: 2px 0 0;
+  line-height: 1.4;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-example-hours {
-  font-size: 11px;
-  color: #c2410c;
+  font-size: 12px;
+  font-weight: 500;
+  color: #000000;
   margin: 2px 0 0;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-example-actions {
@@ -218,22 +274,24 @@
   flex: 1;
   border-radius: 999px;
   padding: 8px 10px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: "Inter", sans-serif;
   border: none;
   cursor: pointer;
   transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease;
 }
 
 .hc-button-primary {
-  background: linear-gradient(120deg, #ea580c, #c2410c);
-  color: #fef7ed;
-  box-shadow: 0 4px 14px rgba(194, 65, 12, 0.35);
+  background: var(--hc-yellow);
+  color: #000000;
+  box-shadow: 0 4px 14px rgba(245, 208, 0, 0.5);
 }
 
 .hc-button-secondary {
-  background: #e8e4df;
-  color: #1c1917;
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #000000;
 }
 
 .hc-button:disabled {
@@ -244,44 +302,57 @@
 
 .hc-button:not(:disabled):active {
   transform: translateY(1px);
-  box-shadow: 0 2px 6px rgba(28, 25, 23, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .hc-input-bar {
-  padding: 8px 10px 10px;
-  border-top: 1px solid rgba(251, 146, 60, 0.2);
-  background: #ffffff;
+  padding: 10px 12px 12px;
+  border-top: none;
+  background: #000000;
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  align-items: center;
 }
 
 .hc-input {
   flex: 1;
   border-radius: 999px;
-  border: 1px solid #d6d3d1;
-  padding: 8px 12px;
-  font-size: 14px;
+  border: none;
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 400;
+  font-family: "Inter", sans-serif;
   outline: none;
+  background: #ffffff;
+  color: #000000;
+}
+
+.hc-input::placeholder {
+  color: #888;
+  font-weight: 400;
 }
 
 .hc-input:focus {
-  border-color: #c2410c;
-  box-shadow: 0 0 0 1px rgba(194, 65, 12, 0.3);
+  border: none;
+  box-shadow: 0 0 0 2px var(--hc-yellow);
 }
 
 .hc-send-button {
-  border-radius: 999px;
-  background: #1c1917;
-  color: #fef7ed;
-  padding: 0 14px;
+  border-radius: 50%;
+  background: var(--hc-yellow-on-dark);
+  color: #000000;
+  padding: 0;
   border: none;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: "Inter", sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 64px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
 }
 
 .hc-send-button:disabled {
@@ -289,14 +360,21 @@
   cursor: default;
 }
 
+.hc-send-arrow {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
 .hc-restart-button {
   border-radius: 999px;
-  background: linear-gradient(120deg, #ea580c, #c2410c);
-  color: #fef7ed;
+  background: var(--hc-yellow);
+  color: #000000;
   padding: 0 20px;
   border: none;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: "Inter", sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -314,29 +392,33 @@
   margin-top: 12px;
   padding: 8px 10px 12px;
   border-radius: 14px;
-  background: #fff7ed;
-  border: 1px solid rgba(251, 146, 60, 0.4);
+  background: #fffef5;
+  border: 2px solid var(--hc-yellow);
 }
 
 .hc-profile-section h2 {
-  font-size: 14px;
+  font-size: 15px;
   margin: 0 0 6px;
-  color: #c2410c;
+  color: #000000;
+  font-weight: 700;
+  font-family: "Inter", sans-serif;
 }
 
 .hc-profile-box {
-  background: #fefaf5;
+  background: #ffffff;
   border-radius: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(251, 146, 60, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .hc-profile-list {
   margin: 0;
   padding-left: 18px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: #1c1917;
+  color: #000000;
+  font-family: "Inter", sans-serif;
+  line-height: 1.5;
   display: flex;
   flex-direction: column;
   gap: 2px;

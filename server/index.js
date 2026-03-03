@@ -109,7 +109,7 @@ const miamiCatalog = [
     imageUrl: "https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=400&q=80"
   },
   {
-    categories: ["art", "art galleries", "galleries", "museums"],
+    categories: ["art", "art galleries", "galleries", "museums", "contemporary art"],
     name: "Pérez Art Museum Miami (PAMM)",
     neighborhood: "Downtown / Museum Park",
     address: "1103 Biscayne Blvd, Miami, FL 33132",
@@ -118,7 +118,7 @@ const miamiCatalog = [
     imageUrl: "https://images.unsplash.com/photo-1558981033-0f142c1c6bb9?auto=format&fit=crop&w=400&q=80"
   },
   {
-    categories: ["art", "art galleries", "galleries", "street art"],
+    categories: ["art", "art galleries", "galleries", "street art", "contemporary art", "murals"],
     name: "Wynwood Walls",
     neighborhood: "Wynwood",
     address: "2516 NW 2nd Ave, Miami, FL 33127",
@@ -127,7 +127,7 @@ const miamiCatalog = [
     imageUrl: "https://images.unsplash.com/photo-1508184964240-ee96bb9677a7?auto=format&fit=crop&w=400&q=80"
   },
   {
-    categories: ["art", "art galleries", "galleries"],
+    categories: ["art", "art galleries", "galleries", "contemporary art"],
     name: "Rubell Museum",
     neighborhood: "Allapattah",
     address: "1100 NW 23rd St, Miami, FL 33127",
@@ -154,7 +154,7 @@ const miamiCatalog = [
     imageUrl: "https://images.unsplash.com/photo-1498601761256-1b0e929dcd34?auto=format&fit=crop&w=400&q=80"
   },
   {
-    categories: ["beach", "beach activities", "outdoors"],
+    categories: ["beach", "beaches", "beach activities", "outdoors"],
     name: "South Pointe Park Pier",
     neighborhood: "South Beach",
     address: "1 Washington Ave, Miami Beach, FL 33139",
@@ -163,7 +163,7 @@ const miamiCatalog = [
     imageUrl: "https://images.unsplash.com/photo-1469796466635-455ede028aca?auto=format&fit=crop&w=400&q=80"
   },
   {
-    categories: ["beach", "beach activities", "outdoors"],
+    categories: ["beach", "beaches", "beach activities", "outdoors"],
     name: "Lummus Park",
     neighborhood: "South Beach",
     address: "1130 Ocean Dr, Miami Beach, FL 33139",
@@ -172,13 +172,139 @@ const miamiCatalog = [
     imageUrl: "https://images.unsplash.com/photo-1479839672679-a46483c0e7c8?auto=format&fit=crop&w=400&q=80"
   },
   {
-    categories: ["beach", "beach activities", "outdoors"],
+    categories: ["beach", "beaches", "beach activities", "outdoors"],
     name: "Crandon Park Beach",
     neighborhood: "Key Biscayne",
     address: "6747 Crandon Blvd, Key Biscayne, FL 33149",
     description: "Family‑friendly beach with shallow water, cabanas, and nature trails.",
     hours: "Daily 8am–sunset",
     imageUrl: "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["food", "dining", "restaurants", "seafood", "brunch"],
+    name: "Glass & Vine",
+    neighborhood: "Coconut Grove",
+    address: "3390 Mary St, Coconut Grove, FL 33133",
+    description: "Garden restaurant in Peacock Park with seafood, brunch, and bay views.",
+    hours: "Daily 11am–10pm (brunch weekends)",
+    imageUrl: "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["food", "dining", "coffee", "cafes", "breakfast"],
+    name: "All Day",
+    neighborhood: "Downtown Miami",
+    address: "1035 N Miami Ave, Miami, FL 33136",
+    description: "Popular café and all-day restaurant with strong coffee and creative breakfast.",
+    hours: "Daily 8am–4pm",
+    imageUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["shopping", "boutiques", "design district", "fashion"],
+    name: "Miami Design District",
+    neighborhood: "Design District",
+    address: "140 NE 39th St, Miami, FL 33137",
+    description: "Open-air district with luxury boutiques, art installations, and restaurants.",
+    hours: "Varies by store, generally 10am–7pm",
+    imageUrl: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["shopping", "shops", "outdoor mall", "Lincoln Road"],
+    name: "Lincoln Road Mall",
+    neighborhood: "South Beach",
+    address: "Lincoln Rd, Miami Beach, FL 33139",
+    description: "Pedestrian mall with shops, restaurants, and people-watching in the heart of South Beach.",
+    hours: "Stores typically 10am–10pm",
+    imageUrl: "https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["shopping", "malls", "waterfront", "Bayside"],
+    name: "Bayside Marketplace",
+    neighborhood: "Downtown Miami",
+    address: "401 Biscayne Blvd, Miami, FL 33132",
+    description: "Waterfront marketplace with shops, eateries, and boat tours on Biscayne Bay.",
+    hours: "Daily 10am–10pm",
+    imageUrl: "https://images.unsplash.com/photo-1580822184713-fc5400e7fe10?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["stand-up comedy", "comedy", "standup", "live comedy"],
+    name: "Villain Theater",
+    neighborhood: "Little Havana",
+    address: "5865 SW 8th St, Miami, FL 33134",
+    description: "Comedy theater with stand-up, improv, and sketch shows in a relaxed setting.",
+    hours: "Shows Thu–Sun, check schedule",
+    imageUrl: "https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["stand-up comedy", "comedy", "standup", "live comedy"],
+    name: "Miami Improv",
+    neighborhood: "Coconut Grove",
+    address: "3390 Mary St, Coconut Grove, FL 33133",
+    description: "Comedy club hosting national and local stand-up acts in Coconut Grove.",
+    hours: "Shows Wed–Sun",
+    imageUrl: "https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["movies", "cinema", "film", "theater"],
+    name: "O Cinema South Beach",
+    neighborhood: "South Beach",
+    address: "1130 Washington Ave, Miami Beach, FL 33139",
+    description: "Indie and arthouse cinema with curated films and special screenings.",
+    hours: "Daily showtimes vary",
+    imageUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["movies", "cinema", "film", "theater"],
+    name: "Silverspot Cinema Brickell",
+    neighborhood: "Brickell",
+    address: "71 SW 12th St, Miami, FL 33130",
+    description: "Upscale cinema with recliner seating, full bar, and current releases.",
+    hours: "Daily, check showtimes",
+    imageUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["water activities", "kayaking", "paddleboard", "paddleboarding", "boats", "Biscayne"],
+    name: "Biscayne National Park Kayak & Eco Tours",
+    neighborhood: "Homestead / Key Largo area",
+    address: "9700 SW 328th St, Homestead, FL 33033",
+    description: "Guided kayak and paddleboard tours in Biscayne Bay's mangrove and marine preserve.",
+    hours: "Tours daily by reservation",
+    imageUrl: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["water activities", "boat tours", "cruises", "sightseeing", "Biscayne Bay"],
+    name: "Island Queen Cruises",
+    neighborhood: "Bayside",
+    address: "401 Biscayne Blvd, Miami, FL 33132",
+    description: "Sightseeing cruises on Biscayne Bay past Millionaires' Row and the skyline.",
+    hours: "Multiple daily departures",
+    imageUrl: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["water activities", "cruises", "boat tours", "sailing", "sunset"],
+    name: "Miami Sunset Cruises",
+    neighborhood: "Miami Beach",
+    address: "Various marinas",
+    description: "Sunset and daytime sailing and cruise options from Miami Beach marinas.",
+    hours: "Varies by operator",
+    imageUrl: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["concerts", "live music", "music venue", "shows"],
+    name: "The Fillmore Miami Beach",
+    neighborhood: "Miami Beach",
+    address: "1700 Washington Ave, Miami Beach, FL 33139",
+    description: "Historic concert venue hosting major touring acts, from rock to hip-hop to electronic.",
+    hours: "Show nights only, check schedule",
+    imageUrl: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["concerts", "live music", "outdoor", "amphitheater"],
+    name: "FPL Solar Amphitheater at Bayfront Park",
+    neighborhood: "Downtown Miami",
+    address: "301 N Biscayne Blvd, Miami, FL 33132",
+    description: "Outdoor amphitheater on the bay for concerts and festivals.",
+    hours: "Event-based",
+    imageUrl: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=400&q=80"
   }
 ];
 
@@ -215,12 +341,44 @@ function extractInterestHeuristically(message) {
 
   const patterns = [
     {
+      label: "Food & dining",
+      keywords: ["food", "restaurant", "restaurants", "dining", "eat", "eat out", "brunch", "breakfast", "lunch", "dinner", "seafood", "coffee", "cafe", "cafes"]
+    },
+    {
       label: "Mexican restaurants",
-      keywords: ["mexican", "taco", "tacos", "food", "restaurant", "restaurants", "eat", "dining"]
+      keywords: ["mexican", "taco", "tacos", "mexican food"]
+    },
+    {
+      label: "Beaches",
+      keywords: ["beach", "beaches", "ocean", "swim", "sunbathe", "sand", "waterfront"]
+    },
+    {
+      label: "Shopping",
+      keywords: ["shopping", "shops", "boutiques", "mall", "malls", "design district", "lincoln road", "bayside", "fashion", "stores"]
+    },
+    {
+      label: "Stand-up comedy",
+      keywords: ["stand-up", "standup", "comedy", "comedian", "improv", "live comedy"]
+    },
+    {
+      label: "Movies",
+      keywords: ["movies", "movie", "cinema", "film", "films", "theater", "theatre", "watch a movie"]
+    },
+    {
+      label: "Water activities",
+      keywords: ["water activities", "water sports", "water games", "kayak", "kayaking", "paddleboard", "paddleboarding", "boat tour", "boat tours", "cruise", "cruises", "sailing", "sailboat", "fishing", "jet ski", "snorkel", "diving", "biscayne"]
+    },
+    {
+      label: "Art",
+      keywords: ["art", "galleries", "gallery", "museum", "museums", "street art", "contemporary art", "murals", "paintings", "sculpture"]
     },
     {
       label: "Live jazz",
       keywords: ["live jazz", "jazz", "live music"]
+    },
+    {
+      label: "Concerts",
+      keywords: ["concerts", "concert", "live music", "shows", "music venue", "amphitheater", "festival", "touring"]
     },
     {
       label: "Rooftop bars",
@@ -228,15 +386,11 @@ function extractInterestHeuristically(message) {
     },
     {
       label: "Art galleries",
-      keywords: ["art gallery", "art galleries", "gallery", "galleries", "museum"]
+      keywords: ["art gallery", "art galleries"]
     },
     {
       label: "Farmers markets",
       keywords: ["farmers market", "farmers markets", "market"]
-    },
-    {
-      label: "Beach activities",
-      keywords: ["beach", "ocean", "swim", "sunbathe"]
     }
   ];
 
@@ -260,7 +414,7 @@ async function callLLM({ message, interests }) {
     // Fallback behavior if no key is configured.
     return {
       reply:
-        "I’m having trouble reaching my AI brain right now, but based on what you said, tell me one thing you enjoy doing when you go out in the city.",
+        "I’m having trouble reaching my AI right now. Tell me one thing you enjoy in Miami — like food, beaches, shopping, or live music — and I'll find some ideas for you.",
       interestCandidate: null
     };
   }
@@ -270,8 +424,21 @@ You are Hello, an AI on-boarding assistant for HelloCity.
 
 Your job:
 - Have a short, friendly conversation about what the user likes to do when going out in the city (specifically Miami).
-- Gently guide them to mention clear, concrete interests such as "Mexican restaurants", "live jazz", "rooftop bars", "art galleries", "farmers markets", or "beach activities".
-- Keep responses short and mobile friendly (1–3 sentences).
+- We support these common activities (use these or similar as interestCandidate when the user mentions them):
+  - Food & dining (search: food, restaurants, dining, brunch, seafood, coffee, cafes)
+  - Beaches (search: beach, beaches, ocean, swim, waterfront)
+  - Shopping (search: shopping, boutiques, malls, design district, Lincoln Road, Bayside)
+  - Mexican restaurants (search: mexican, tacos)
+  - Stand-up comedy (search: comedy, standup, improv, live comedy)
+  - Movies (search: movies, cinema, film, theater)
+  - Water activities (search: water sports, water games, kayaking, paddleboard, boat tours, cruises, sailing, fishing)
+  - Art (search: art, galleries, museums, street art, contemporary art, murals)
+  - Concerts (search: concerts, live music, shows, music venue, amphitheater)
+  - Live jazz (search: jazz, live music)
+  - Rooftop bars (search: rooftop, rooftop bar)
+  - Art galleries (search: art, galleries, museums)
+  - Farmers markets (search: farmers market, markets)
+- Gently guide them to mention one clear interest from the list above, or something similar. Keep responses short and mobile friendly (1–3 sentences).
 
 IMPORTANT: You must always return a single JSON object (and nothing else) with this exact shape:
 {
@@ -281,7 +448,7 @@ IMPORTANT: You must always return a single JSON object (and nothing else) with t
 
 Rules for "interestCandidate":
 - Base it on the MOST RECENT user message only.
-- Keep it short and generic, e.g. "Mexican restaurants", "live jazz", "rooftop bars", "art galleries", "farmers markets", "beach activities".
+- Use one of: "Food & dining", "Beaches", "Shopping", "Mexican restaurants", "Stand-up comedy", "Movies", "Water activities", "Art", "Concerts", "Live jazz", "Rooftop bars", "Art galleries", "Farmers markets" (or a close variant the user said).
 - If the user mentions multiple ideas, pick the one that seems most actionable for going out in Miami.
 - If the message is ambiguous, use null.
 
@@ -334,7 +501,7 @@ Return ONLY the JSON object. No markdown, no explanation. Ensure valid JSON.
   if (!json || typeof json.reply !== "string") {
     return {
       reply:
-        "Let’s keep this simple — tell me one thing you love doing when you go out in Miami, like rooftop bars or live music.",
+        "Let’s keep this simple — tell me one thing you love doing in Miami, like food, beaches, shopping, stand-up comedy, movies, water activities, art, concerts, live music, or rooftop bars.",
       interestCandidate: null
     };
   }
@@ -358,7 +525,7 @@ app.post("/api/session/start", (req, res) => {
     sessionId,
     state: sessions[sessionId],
     message:
-      "Hi, I’m Hello 👋 I’ll help you discover great things to do in Miami. To start, tell me one thing you enjoy when you go out in the city."
+      "Hi, I’m Hello 👋 I’ll help you discover great things to do in Miami. Tell me what you're into — food, beaches, shopping, stand-up comedy, movies, water activities, art, concerts, live music, or anything else you love doing in the city."
   });
 });
 
@@ -392,13 +559,29 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
     ? `User feedback: ${feedback === "yes" ? "Yes, that matched what I meant." : "No, that wasn’t quite right."}`
     : "";
 
-  const { reply, interestCandidate: llmInterest } = await callLLM({
-    message: userText,
-    interests: session.interests
-  });
+  let reply;
+  let llmInterest = null;
+  try {
+    const result = await callLLM({
+      message: userText,
+      interests: session.interests
+    });
+    reply = result.reply;
+    llmInterest = result.interestCandidate;
+  } catch (err) {
+    console.error("HelloCity LLM error:", err);
+    const fallbackInterest = extractInterestHeuristically(userText);
+    if (fallbackInterest) {
+      llmInterest = fallbackInterest;
+      const fallbackExamples = findExamplesForInterest(fallbackInterest);
+      reply = fallbackExamples.length > 0
+        ? "Nice — " + fallbackInterest + " is a great pick for Miami. Here are some ideas for you. Do any of these match what you had in mind?"
+        : "I'm having a quick hiccup, but I heard you're into " + fallbackInterest + ". Try again in a moment and I'll find some Miami ideas for you!";
+    } else {
+      reply = "I'm having a little trouble right now. Try again in a moment, or tell me something you're into — like food, beaches, water sports, or concerts!";
+    }
+  }
 
-  // If the LLM couldn't give us a clear interest (or is unavailable),
-  // fall back to simple keyword-based extraction so the flow still progresses.
   const interestCandidate =
     llmInterest || extractInterestHeuristically(userText);
 
