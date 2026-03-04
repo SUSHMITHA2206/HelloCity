@@ -121,6 +121,12 @@ function App() {
           role: "assistant",
           text: "Got it — try again in a moment, or tell me something else you're into!",
         });
+      } else {
+        nextMessages.push({
+          id: `error-${Date.now()}`,
+          role: "system",
+          text: "Server error — please try again in a moment.",
+        });
       }
 
       setMessages((prev) => [...prev, ...nextMessages]);

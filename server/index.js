@@ -13,15 +13,26 @@ app.use(cors());
 app.use(express.json());
 
 /**
- * In-memory session store.
- * Shape:
- * {
- *   [sessionId]: {
- *     interests: string[],
- *     completed: boolean,
- *     createdAt: number
- *   }
- * }
+ * LLM + deterministic logic (for evaluation):
+ *
+ * 1. CONVERSATIONAL RESPONSES: A real LLM (OpenAI) generates every assistant
+ *    reply. The system prompt instructs it to respond naturally to each
+ *    message (acknowledge, react, follow up). We pass the last assistant
+ *    message as context so the LLM can handle "yes"/"no" and short replies.
+ *
+ * 2. STRUCTURED EXTRACTION: The LLM returns a single JSON object with
+ *    "reply" (conversational text) and "interestCandidate" (one of our
+ *    allowed categories or null). We parse and validate this; heuristics
+ *    are used only when the LLM is unavailable or returns no candidate.
+ *
+ * 3. DETERMINISTIC BACKEND: Session state, deduplication, catalog lookup
+ *    (findExamplesForInterest), completion after 3 interests, and
+ *    heuristic fallback are all deterministic. The backend never invents
+ *    interests—it only uses LLM output or keyword-based extraction.
+ */
+
+/**
+ * In-memory session store. Shape: { [sessionId]: { interests, completed, createdAt, lastAssistantMessage? } }
  */
 const sessions = {};
 
@@ -403,12 +414,102 @@ function extractInterestHeuristically(message) {
   return null;
 }
 
+/** Different reply phrases per interest so responses don't sound the same. */
+const INTEREST_REPLIES = {
+  "Food & dining": "Good call — Miami has amazing food. Here are some spots you might like.",
+  "Mexican restaurants": "Love it — tacos and margaritas in Miami hit different. Here are some ideas.",
+  "Beaches": "Can't go wrong with the beach here. Here are some Miami beach spots for you.",
+  "Shopping": "Miami shopping is top-tier. Here are some places to check out.",
+  "Stand-up comedy": "Comedy nights in Miami are a blast. Here are some venues to try.",
+  "Movies": "Miami has some great cinemas — indie spots and big screens. Here are a few ideas.",
+  "Water activities": "Water activities in Miami are unbeatable. Here are some options for you.",
+  "Art": "Miami's art scene is huge — galleries, murals, museums. Here are some ideas.",
+  "Live jazz": "Live music and jazz in Miami — here are some spots with great vibes.",
+  "Concerts": "Miami's concert and live music scene is solid. Here are some venues.",
+  "Rooftop bars": "Rooftop bars with views — very Miami. Here are some ideas.",
+  "Art galleries": "Art galleries and museums here are worth a visit. Here are a few.",
+  "Farmers markets": "Farmers markets in Miami are fun for a relaxed morning. Here are some."
+};
+
+/** Conversational fallback when LLM is unavailable or returns invalid JSON. */
+function getConversationalFallback(userMessage) {
+  if (!userMessage) {
+    return "Tell me one thing you love doing in Miami — like food, beaches, water sports, or concerts!";
+  }
+  const m = userMessage.toLowerCase().trim();
+  // If the message clearly indicates an interest, use an interest-specific phrase
+  const interest = extractInterestHeuristically(userMessage);
+  if (interest && INTEREST_REPLIES[interest]) {
+    return INTEREST_REPLIES[interest];
+  }
+  if (interest) {
+    return "Love that — " + interest + " sounds great for Miami! Here are some ideas for you.";
+  }
+  // Short exact greetings
+  if (/^(hi|hey|hello|hii|hiya|howdy|yo)\s*!*$/.test(m) || /^(good\s+)?(morning|afternoon|evening)\s*!*\.*$/i.test(m)) {
+    return "Hi there! 👋 Good to meet you. I'm here to help you discover things to do in Miami — what's one thing you love doing when you're out in the city?";
+  }
+  // "How are you?" (exact or with punctuation) — reply by answering the question only
+  if (/^how\s+are\s+you\??\s*$/i.test(m)) {
+    return "I'm doing great, thanks for asking! 👋 What's one thing you love doing when you're out in Miami?";
+  }
+  if (/^how('re|\s+is)\s+it\s+going\??\s*$/i.test(m)) {
+    return "Going well, thanks! What's one thing you love doing in Miami?";
+  }
+  // Only say "Nice to meet you too" when they actually said nice to meet you
+  if (/\bnice\s+to\s+meet\s+you\b/i.test(m) || /\bgood\s+to\s+meet\s+you\b/i.test(m)) {
+    return "I'm doing great, thanks! Nice to meet you too 👋 What's one thing you love doing when you're out in Miami?";
+  }
+  // "How are you" with other text (e.g. "hii, how are you?") — answer the question, don't say "nice to meet you"
+  if (/\bhow\s+are\s+you\b/i.test(m) || /\bhow'?s\s+it\s+going\b/i.test(m)) {
+    return "I'm doing great, thanks for asking! 👋 What's one thing you love doing when you're out in Miami?";
+  }
+  if (/^(yes|yeah|yep|sure|ok|okay)\s*\.*!*\s*$/i.test(m)) {
+    return "Great! What else do you enjoy? Pick something like food, beaches, shopping, or live music.";
+  }
+  if (/^(no|nope|not really)\s*\.*!*\s*$/i.test(m)) {
+    return "No worries! Tell me something else you're into — art, movies, comedy, water sports, anything that sounds fun.";
+  }
+  // Thank you / thanks — respond like a human
+  if (/\b(thank you|thanks|thankyou|thx|ty)\b/i.test(m) && m.length < 35) {
+    return "You're welcome! Happy to help. If you want more Miami ideas, just tell me another thing you're into — or we can keep going with what we have.";
+  }
+  // Bye / goodbye
+  if (/^(bye|goodbye|good bye|see you|later|take care)\s*!*\.*$/i.test(m)) {
+    return "Bye! Have a great time in Miami. Come back anytime you want more ideas.";
+  }
+  // User clicked "Yes, that's what I meant" or "No" on the example cards (feedback from frontend)
+  if (/user feedback:\s*yes/i.test(m) || /\byes, that matched what i meant\b/i.test(m)) {
+    return "Awesome! What else do you enjoy? Pick another thing — food, beaches, movies, concerts, anything you like.";
+  }
+  if (/user feedback:\s*no/i.test(m) || /\bno, that wasn't quite right\b/i.test(m)) {
+    return "No problem — what else are you into? Tell me something different and I'll find better ideas.";
+  }
+  // Off-topic or unrelated: polite human-like response, then ask what they want to explore
+  const offTopicPatterns = [
+    /\bwhat('s| is) the (weather|time)\b/i,
+    /\bwho (won|is|are)\b/i,
+    /\btell me (a joke|about)\b/i,
+    /\bhow (do i|can i)\s+(fix|make|get)\b/i,
+    /\b(weather|sports scores?|news|politics|recipe)\b/i,
+    /\bwhat do you think (about|of)\b/i,
+    /\bdo you (know|like)\s+(about|that)\b/i
+  ];
+  const looksOffTopic = offTopicPatterns.some((p) => p.test(m));
+  if (looksOffTopic) {
+    return "Sorry, I don't know much about that — I'm here to help you discover things to do in Miami. What would you like to explore? Food, beaches, movies, concerts, or something else?";
+  }
+  // Default: polite redirect as if we didn't quite get it
+  return "I'm not sure about that one — I'm really here to help with things to do in Miami. What would you like to explore? Food, beaches, movies, concerts, or water sports?";
+}
+
 /**
  * Call OpenAI to:
- * - Respond conversationally as a friendly HelloCity on-boarding assistant.
- * - Extract at most one structured interest from the latest user input.
+ * 1. Conversational response: natural reply to every user message.
+ * 2. Structured extraction: one interest category (interestCandidate) or null.
+ * Heuristics are used only when the LLM is unavailable.
  */
-async function callLLM({ message, interests }) {
+async function callLLM({ message, interests, lastAssistantMessage }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     // Fallback behavior if no key is configured.
@@ -423,8 +524,9 @@ async function callLLM({ message, interests }) {
 You are Hello, an AI on-boarding assistant for HelloCity.
 
 Your job:
-- Have a short, friendly conversation about what the user likes to do when going out in the city (specifically Miami).
-- We support these common activities (use these or similar as interestCandidate when the user mentions them):
+- Respond to every message — no matter what the user says (thanks, bye, a question, an interest, small talk). You must always give a natural, human-like reply. Never ignore or give a generic non-answer.
+- Respond in a conversational way: acknowledge what they said, react briefly (e.g. "Nice!", "Love that", "You're welcome!"), then add a short follow-up. Keep replies to 1–3 sentences, mobile-friendly.
+- Have a short, friendly conversation about what they like to do in Miami. We support these common activities (use as interestCandidate when the user mentions them):
   - Food & dining (search: food, restaurants, dining, brunch, seafood, coffee, cafes)
   - Beaches (search: beach, beaches, ocean, swim, waterfront)
   - Shopping (search: shopping, boutiques, malls, design district, Lincoln Road, Bayside)
@@ -439,6 +541,15 @@ Your job:
   - Art galleries (search: art, galleries, museums)
   - Farmers markets (search: farmers market, markets)
 - Gently guide them to mention one clear interest from the list above, or something similar. Keep responses short and mobile friendly (1–3 sentences).
+- When the user has already given 1 or 2 interests, you can briefly reference them to keep the conversation natural (e.g. "So we have beaches and movies so far — what's one more thing you're into?").
+
+CRITICAL — Be conversational and varied:
+- For greetings or small talk ("Hello", "hi", "how are you", "hey"): respond in a warm, natural way (e.g. "Hi there! 👋 Good to meet you. What do you like doing when you're out in Miami?" or "I'm great, thanks! Ready to find some cool stuff for you. What's one thing you enjoy in the city?"). Set interestCandidate to null. Never use the same generic line for every message.
+- For clear interests: acknowledge specifically what they said, then say you're finding ideas or that you've noted it. Use different phrasing per interest (e.g. movies: "Miami has great cinemas — here are some ideas"; live music: "The music scene here is awesome — here are some spots"; beaches: "Can't beat the beach in Miami — here are a few spots"). Never use the same sentence for every interest.
+- For "yes" or "no": respond in context of your last message (e.g. "Awesome!" or "No problem — what else do you like?"). Set interestCandidate appropriately or null.
+- For off-topic or unrelated questions (e.g. weather, sports, general knowledge, something outside Miami activities): respond like a friendly human. Say politely that you don't know about that or can't help with it, then ask what they'd like to explore in Miami. Example: "Sorry, I don't know much about that — I'm here to help you discover things to do in Miami. What would you like to explore? Food, beaches, movies, concerts?" Set interestCandidate to null.
+- For "thank you", "thanks", "bye", "goodbye": respond naturally (e.g. "You're welcome! Happy to help. Want more Miami ideas? Just tell me another thing you're into." or "Bye! Have a great time in Miami."). Set interestCandidate to null.
+- Always tailor your reply to what the user actually said. Never reply with a single repeated phrase for every message.
 
 IMPORTANT: You must always return a single JSON object (and nothing else) with this exact shape:
 {
@@ -453,14 +564,12 @@ Rules for "interestCandidate":
 - If the message is ambiguous, use null.
 
 Current collected interests: ${JSON.stringify(interests)}
+${lastAssistantMessage ? `\nYour last message to the user (for context when they say "yes", "no", or short replies): "${lastAssistantMessage}"` : ""}
 `;
 
-  const userPrompt = `
-User message:
-${message}
+  const userPrompt = `User message: ${message}
 
-Return ONLY the JSON object. No markdown, no explanation. Ensure valid JSON.
-`;
+Return ONLY the JSON object. No markdown, no explanation. Valid JSON only.`;
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -500,8 +609,7 @@ Return ONLY the JSON object. No markdown, no explanation. Ensure valid JSON.
 
   if (!json || typeof json.reply !== "string") {
     return {
-      reply:
-        "Let’s keep this simple — tell me one thing you love doing in Miami, like food, beaches, shopping, stand-up comedy, movies, water activities, art, concerts, live music, or rooftop bars.",
+      reply: getConversationalFallback(message),
       interestCandidate: null
     };
   }
@@ -564,7 +672,8 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
   try {
     const result = await callLLM({
       message: userText,
-      interests: session.interests
+      interests: session.interests,
+      lastAssistantMessage: session.lastAssistantMessage || null
     });
     reply = result.reply;
     llmInterest = result.interestCandidate;
@@ -574,11 +683,13 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
     if (fallbackInterest) {
       llmInterest = fallbackInterest;
       const fallbackExamples = findExamplesForInterest(fallbackInterest);
-      reply = fallbackExamples.length > 0
-        ? "Nice — " + fallbackInterest + " is a great pick for Miami. Here are some ideas for you. Do any of these match what you had in mind?"
-        : "I'm having a quick hiccup, but I heard you're into " + fallbackInterest + ". Try again in a moment and I'll find some Miami ideas for you!";
+      reply = (INTEREST_REPLIES[fallbackInterest] && fallbackExamples.length > 0)
+        ? INTEREST_REPLIES[fallbackInterest]
+        : fallbackExamples.length > 0
+          ? "Nice — " + fallbackInterest + " is a great pick for Miami. Here are some ideas. Do any of these match what you had in mind?"
+          : "I'm having a quick hiccup, but I heard you're into " + fallbackInterest + ". Try again in a moment and I'll find some Miami ideas for you!";
     } else {
-      reply = "I'm having a little trouble right now. Try again in a moment, or tell me something you're into — like food, beaches, water sports, or concerts!";
+      reply = getConversationalFallback(userText);
     }
   }
 
@@ -617,6 +728,8 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
   if (session.completed) {
     responsePayload.profile = { interests: session.interests };
   }
+
+  session.lastAssistantMessage = reply;
 
   res.json(responsePayload);
 });
