@@ -1,10 +1,12 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const fetch = require("cross-fetch");
 
-dotenv.config();
+// Load .env from server directory so it works when run from project root or server/
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -15,24 +17,29 @@ app.use(express.json());
 /**
  * LLM + deterministic logic (for evaluation):
  *
- * 1. CONVERSATIONAL RESPONSES: A real LLM (OpenAI) generates every assistant
- *    reply. The system prompt instructs it to respond naturally to each
- *    message (acknowledge, react, follow up). We pass the last assistant
- *    message as context so the LLM can handle "yes"/"no" and short replies.
+ * 1. FLOW: UI → Backend. Backend loads session message history, appends new user
+ *    message, builds messages for the LLM. Backend calls LLM (with tools). If the
+ *    LLM requests a tool (search_places), backend runs the tool, appends tool
+ *    results to messages, and calls the LLM again. Backend saves messages to
+ *    session and sends reply + examples to the UI.
  *
- * 2. STRUCTURED EXTRACTION: The LLM returns a single JSON object with
- *    "reply" (conversational text) and "interestCandidate" (one of our
- *    allowed categories or null). We parse and validate this; heuristics
- *    are used only when the LLM is unavailable or returns no candidate.
+ * 2. TOOLS: search_places(interest) returns 3 Miami venues from the catalog.
+ *    The LLM is instructed to call it when the user mentions a Miami interest.
  *
- * 3. DETERMINISTIC BACKEND: Session state, deduplication, catalog lookup
- *    (findExamplesForInterest), completion after 3 interests, and
- *    heuristic fallback are all deterministic. The backend never invents
- *    interests—it only uses LLM output or keyword-based extraction.
+ * 3. CONVERSATIONAL RESPONSES: A real LLM (Groq or OpenAI) generates every
+ *    assistant reply. When tools are not used, the legacy callLLM path still
+ *    returns reply + interestCandidate (JSON); heuristics are used when the LLM
+ *    is unavailable or returns no candidate.
+ *
+ * 4. DETERMINISTIC BACKEND: Session state, deduplication, catalog lookup
+ *    (findExamplesForInterest), completion after 3 interests, and heuristic
+ *    fallback are all deterministic.
  */
 
 /**
- * In-memory session store. Shape: { [sessionId]: { interests, completed, createdAt, lastAssistantMessage? } }
+ * In-memory session store. Shape:
+ * { interests, completed, createdAt, lastAssistantMessage?, messages?: [{ role, content?, tool_calls?, ... }] }
+ * messages: full history for LLM (user + assistant + tool results).
  */
 const sessions = {};
 
@@ -64,6 +71,33 @@ const miamiCatalog = [
     description: "Neighborhood classic in Little Havana serving Mexico City–style tacos and margaritas.",
     hours: "Daily 11am–11pm",
     imageUrl: "https://images.unsplash.com/photo-1543353071-873f17a7a088?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["indian", "indian cuisine", "indian food", "indian restaurants"],
+    name: "Bombay Darbar",
+    neighborhood: "Coconut Grove",
+    address: "2915 McFarlane Rd, Coconut Grove, FL 33133",
+    description: "Upscale Indian restaurant with North and South Indian dishes, tandoori, and curries.",
+    hours: "Daily 11:30am–10:30pm",
+    imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["indian", "indian cuisine", "indian food", "indian restaurants"],
+    name: "Ghee Indian Kitchen",
+    neighborhood: "Wynwood",
+    address: "896 SW 2nd Ave, Miami, FL 33130",
+    description: "Modern Indian kitchen with seasonal ingredients and a creative take on classic dishes.",
+    hours: "Tue–Sun 5pm–10pm",
+    imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=400&q=80"
+  },
+  {
+    categories: ["indian", "indian cuisine", "indian food", "indian restaurants"],
+    name: "Ayesha's Kitchen",
+    neighborhood: "Brickell",
+    address: "901 Brickell Plaza, Miami, FL 33131",
+    description: "Indian and Indo-Chinese favorites, biryanis, and vegetarian options in a casual setting.",
+    hours: "Daily 11am–10pm",
+    imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=400&q=80"
   },
   {
     categories: ["live jazz", "jazz", "music", "live music"],
@@ -338,12 +372,134 @@ function findExamplesForInterest(interestLabel) {
     );
   }
 
-  // If still nothing, just pick three diverse examples.
+  // Only return places that actually match. Do not show unrelated catalog entries
+  // (e.g. do not show Mexican restaurants when the user asked for Japanese).
   if (matches.length === 0) {
-    matches = miamiCatalog.slice(0, 3);
+    return [];
   }
 
   return matches.slice(0, 3);
+}
+
+/** Map our interest labels to Foursquare search queries (Miami). */
+const INTEREST_TO_QUERY = {
+  "Food & dining": "restaurant",
+  "Beaches": "beach",
+  "Shopping": "shopping",
+  "Mexican restaurants": "mexican restaurant",
+  "Indian restaurants": "indian restaurant",
+  "Stand-up comedy": "comedy club",
+  "Movies": "movie theater",
+  "Water activities": "boat tour",
+  "Art": "art museum",
+  "Concerts": "concert venue",
+  "Live jazz": "jazz club",
+  "Rooftop bars": "rooftop bar",
+  "Art galleries": "art gallery",
+  "Farmers markets": "farmers market"
+};
+
+const MIAMI_NEAR = "Miami, FL";
+const DEFAULT_PLACE_IMAGE = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=400&q=80";
+
+/**
+ * Fetch up to 3 places from Foursquare Places API.
+ * searchQuery: free-form search from LLM (e.g. "indian restaurant", "sushi") or a category label.
+ */
+async function fetchPlacesFromFoursquare(searchQuery) {
+  const apiKey = process.env.FOURSQUARE_API_KEY;
+  if (!apiKey) return [];
+
+  const query = INTEREST_TO_QUERY[searchQuery] || String(searchQuery).toLowerCase() || "things to do";
+  const params = new URLSearchParams({
+    near: MIAMI_NEAR,
+    query,
+    limit: "3",
+    fields: "name,location,description"
+  });
+
+  try {
+    const res = await fetch(
+      `https://api.foursquare.com/v3/places/search?${params}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: apiKey,
+          Accept: "application/json"
+        }
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[HelloCity] Foursquare API error:", res.status, data);
+      return [];
+    }
+    const results = data.results || data.places || data.data || [];
+    if (!Array.isArray(results)) return [];
+    return results.slice(0, 3).map((p) => {
+      const loc = p.location || {};
+      const address = loc.formatted_address || [loc.address, loc.locality, loc.region]
+        .filter(Boolean)
+        .join(", ");
+      return {
+        name: p.name || "Unnamed place",
+        neighborhood: loc.locality || loc.region || undefined,
+        address: address || undefined,
+        description: p.description || undefined,
+        imageUrl: p.imageUrl || DEFAULT_PLACE_IMAGE
+      };
+    });
+  } catch (err) {
+    console.error("[HelloCity] Foursquare fetch error:", err.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch up to 3 places from Google Places API (New) — same source as Google search results.
+ * textQuery: e.g. "padel Miami", "sushi restaurant Miami"
+ */
+async function fetchPlacesFromGoogle(textQuery) {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) return [];
+
+  const query = String(textQuery).trim() || "things to do";
+  const textQueryWithLocation = query.toLowerCase().includes("miami") ? query : `${query} Miami`;
+
+  try {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.regularOpeningHours"
+      },
+      body: JSON.stringify({ textQuery: textQueryWithLocation })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[HelloCity] Google Places API error:", res.status, data?.error?.message || data);
+      return [];
+    }
+    const places = data.places || [];
+    if (!Array.isArray(places)) return [];
+    return places.slice(0, 3).map((p) => {
+      const name = p.displayName?.text || p.displayName || p.name || "Unnamed place";
+      const address = p.formattedAddress || p.formatted_address || undefined;
+      const rating = p.rating != null ? `${p.rating}★` : undefined;
+      const count = p.userRatingCount != null ? `(${p.userRatingCount} reviews)` : undefined;
+      const desc = [rating, count].filter(Boolean).join(" ");
+      return {
+        name,
+        address,
+        description: desc || undefined,
+        imageUrl: DEFAULT_PLACE_IMAGE
+      };
+    });
+  } catch (err) {
+    console.error("[HelloCity] Google Places fetch error:", err.message);
+    return [];
+  }
 }
 
 function extractInterestHeuristically(message) {
@@ -351,6 +507,10 @@ function extractInterestHeuristically(message) {
   const text = message.toLowerCase();
 
   const patterns = [
+    {
+      label: "Indian restaurants",
+      keywords: ["indian", "indian cuisine", "indian food", "curry", "curries", "biryani", "naan", "tandoori"]
+    },
     {
       label: "Food & dining",
       keywords: ["food", "restaurant", "restaurants", "dining", "eat", "eat out", "brunch", "breakfast", "lunch", "dinner", "seafood", "coffee", "cafe", "cafes"]
@@ -414,10 +574,33 @@ function extractInterestHeuristically(message) {
   return null;
 }
 
+/** Derive a short place search query from the user message (e.g. "i love sushi" -> "sushi"). */
+function deriveSearchQueryFromMessage(message) {
+  if (!message || typeof message !== "string") return "";
+  const stop = new Set(["i", "love", "like", "want", "find", "looking", "for", "in", "miami", "the", "a", "some", "me", "my", "to", "get", "have"]);
+  const words = message.toLowerCase().trim().split(/\s+/).filter((w) => w.length > 1 && !stop.has(w));
+  return words.length ? words.join(" ") : message.trim().toLowerCase().slice(0, 50);
+}
+
+/** True if the message is clearly just greeting/small talk — we should not search for places. */
+function isGreetingOrSmallTalk(message) {
+  if (!message || typeof message !== "string") return true;
+  const t = message.toLowerCase().trim();
+  const greetings = [
+    "hello", "hi", "hey", "how are you", "how are u", "what's your name", "whats your name",
+    "how's your day", "hows your day", "good morning", "good afternoon", "good evening",
+    "nice to meet you", "who are you", "how do you do"
+  ];
+  if (greetings.some((g) => t === g || t.startsWith(g + " ") || t.includes(" " + g) || t.includes(g + " ") || t.includes(" " + g + " "))) return true;
+  if (t.length <= 25 && !/\b(food|restaurant|beach|padel|sushi|indian|mexican|concert|art|shop|movie|comedy|water|jazz|rooftop|bar|cafe|cuisine|place|spot|things to do)\b/i.test(t)) return true;
+  return false;
+}
+
 /** Different reply phrases per interest so responses don't sound the same. */
 const INTEREST_REPLIES = {
   "Food & dining": "Good call — Miami has amazing food. Here are some spots you might like.",
   "Mexican restaurants": "Love it — tacos and margaritas in Miami hit different. Here are some ideas.",
+  "Indian restaurants": "Indian food in Miami is great — here are some spots you might like.",
   "Beaches": "Can't go wrong with the beach here. Here are some Miami beach spots for you.",
   "Shopping": "Miami shopping is top-tier. Here are some places to check out.",
   "Stand-up comedy": "Comedy nights in Miami are a blast. Here are some venues to try.",
@@ -464,6 +647,14 @@ function getConversationalFallback(userMessage) {
   if (/\bhow\s+are\s+you\b/i.test(m) || /\bhow'?s\s+it\s+going\b/i.test(m)) {
     return "I'm doing great, thanks for asking! 👋 What's one thing you love doing when you're out in Miami?";
   }
+  // "What's your name?" / "Who are you?"
+  if (/\b(what'?s|what is) your name\b/i.test(m) || /\bwho are you\b/i.test(m) || /\bwhat can you do\b/i.test(m)) {
+    return "I'm Hello! 👋 I'm your AI assistant for HelloCity — I help you discover things to do in Miami, like food, beaches, concerts, and more. What would you like to explore?";
+  }
+  // "How old are you?"
+  if (/\bhow old are you\b/i.test(m) || /\bwhen were you (made|created|born)\b/i.test(m)) {
+    return "I don't have an age like humans — I'm Hello, your Miami guide, and I'm here whenever you need ideas! What do you like doing when you're out in the city?";
+  }
   if (/^(yes|yeah|yep|sure|ok|okay)\s*\.*!*\s*$/i.test(m)) {
     return "Great! What else do you enjoy? Pick something like food, beaches, shopping, or live music.";
   }
@@ -485,7 +676,7 @@ function getConversationalFallback(userMessage) {
   if (/user feedback:\s*no/i.test(m) || /\bno, that wasn't quite right\b/i.test(m)) {
     return "No problem — what else are you into? Tell me something different and I'll find better ideas.";
   }
-  // Off-topic or unrelated: polite human-like response, then ask what they want to explore
+  // When we can't answer (no LLM): be honest and offer Miami as one option
   const offTopicPatterns = [
     /\bwhat('s| is) the (weather|time)\b/i,
     /\bwho (won|is|are)\b/i,
@@ -495,24 +686,27 @@ function getConversationalFallback(userMessage) {
     /\bwhat do you think (about|of)\b/i,
     /\bdo you (know|like)\s+(about|that)\b/i
   ];
-  const looksOffTopic = offTopicPatterns.some((p) => p.test(m));
-  if (looksOffTopic) {
-    return "Sorry, I don't know much about that — I'm here to help you discover things to do in Miami. What would you like to explore? Food, beaches, movies, concerts, or something else?";
+  const looksLikeGeneralQuestion = offTopicPatterns.some((p) => p.test(m));
+  if (looksLikeGeneralQuestion) {
+    return "I'd love to answer that — I'm having a quick hiccup right now. Try again in a moment and I'll respond like usual. Or ask me about things to do in Miami!";
   }
-  // Default: polite redirect as if we didn't quite get it
-  return "I'm not sure about that one — I'm really here to help with things to do in Miami. What would you like to explore? Food, beaches, movies, concerts, or water sports?";
+  // Default when we didn't match anything (fallback only — LLM would answer anything)
+  return "I'm having a quick hiccup — try again in a moment, or tell me what you'd like to explore in Miami!";
 }
 
 /**
- * Call OpenAI to:
- * 1. Conversational response: natural reply to every user message.
- * 2. Structured extraction: one interest category (interestCandidate) or null.
- * Heuristics are used only when the LLM is unavailable.
+ * Call LLM (Groq or OpenAI) for:
+ * 1. Conversational response to every user message.
+ * 2. Structured extraction: interestCandidate or null.
+ * Prefers Groq if GROQ_API_KEY is set; else OpenAI. Heuristics when neither is set.
  */
 async function callLLM({ message, interests, lastAssistantMessage }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    // Fallback behavior if no key is configured.
+  const groqKey = process.env.GROQ_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  const provider = groqKey ? "groq" : openaiKey ? "openai" : null;
+  if (!provider) {
+    console.log("[HelloCity] No GROQ_API_KEY or OPENAI_API_KEY — using fallback");
     return {
       reply:
         "I’m having trouble reaching my AI right now. Tell me one thing you enjoy in Miami — like food, beaches, shopping, or live music — and I'll find some ideas for you.",
@@ -520,104 +714,250 @@ async function callLLM({ message, interests, lastAssistantMessage }) {
     };
   }
 
+  const apiUrl = groqKey
+    ? "https://api.groq.com/openai/v1/chat/completions"
+    : "https://api.openai.com/v1/chat/completions";
+  const apiKey = groqKey || openaiKey;
+  const model = groqKey ? "llama-3.1-8b-instant" : "gpt-4.1-mini";
+
   const systemPrompt = `
-You are Hello, an AI on-boarding assistant for HelloCity.
+You are Hello, a friendly AI assistant (like ChatGPT). You answer all kinds of questions — no limits. You are also the HelloCity guide for Miami: when the user talks about things to do in Miami, we use that to suggest real spots.
 
-Your job:
-- Respond to every message — no matter what the user says (thanks, bye, a question, an interest, small talk). You must always give a natural, human-like reply. Never ignore or give a generic non-answer.
-- Respond in a conversational way: acknowledge what they said, react briefly (e.g. "Nice!", "Love that", "You're welcome!"), then add a short follow-up. Keep replies to 1–3 sentences, mobile-friendly.
-- Have a short, friendly conversation about what they like to do in Miami. We support these common activities (use as interestCandidate when the user mentions them):
-  - Food & dining (search: food, restaurants, dining, brunch, seafood, coffee, cafes)
-  - Beaches (search: beach, beaches, ocean, swim, waterfront)
-  - Shopping (search: shopping, boutiques, malls, design district, Lincoln Road, Bayside)
-  - Mexican restaurants (search: mexican, tacos)
-  - Stand-up comedy (search: comedy, standup, improv, live comedy)
-  - Movies (search: movies, cinema, film, theater)
-  - Water activities (search: water sports, water games, kayaking, paddleboard, boat tours, cruises, sailing, fishing)
-  - Art (search: art, galleries, museums, street art, contemporary art, murals)
-  - Concerts (search: concerts, live music, shows, music venue, amphitheater)
-  - Live jazz (search: jazz, live music)
-  - Rooftop bars (search: rooftop, rooftop bar)
-  - Art galleries (search: art, galleries, museums)
-  - Farmers markets (search: farmers market, markets)
-- Gently guide them to mention one clear interest from the list above, or something similar. Keep responses short and mobile friendly (1–3 sentences).
-- When the user has already given 1 or 2 interests, you can briefly reference them to keep the conversation natural (e.g. "So we have beaches and movies so far — what's one more thing you're into?").
+Answer every question the user asks:
+- General knowledge, science, history, how things work — answer helpfully.
+- "What's your name?", "How old are you?", "Who are you?" — answer naturally and warmly.
+- Weather, sports, news, recipes, advice, coding, writing — answer as well as you can. If you don't know, say so briefly and offer to help with something else.
+- When the question is about things to do in Miami (food, beaches, concerts, movies, etc.), acknowledge it and say you're finding ideas — and set interestCandidate to the matching category below. For any other message, set interestCandidate to null.
+- Do NOT refuse to answer or redirect to Miami just because the question isn't about Miami. Answer the question first, fully. You may optionally add one short line at the end like "Want Miami ideas too? Just tell me what you're into!" only when it fits naturally.
 
-CRITICAL — Be conversational and varied:
-- For greetings or small talk ("Hello", "hi", "how are you", "hey"): respond in a warm, natural way (e.g. "Hi there! 👋 Good to meet you. What do you like doing when you're out in Miami?" or "I'm great, thanks! Ready to find some cool stuff for you. What's one thing you enjoy in the city?"). Set interestCandidate to null. Never use the same generic line for every message.
-- For clear interests: acknowledge specifically what they said, then say you're finding ideas or that you've noted it. Use different phrasing per interest (e.g. movies: "Miami has great cinemas — here are some ideas"; live music: "The music scene here is awesome — here are some spots"; beaches: "Can't beat the beach in Miami — here are a few spots"). Never use the same sentence for every interest.
-- For "yes" or "no": respond in context of your last message (e.g. "Awesome!" or "No problem — what else do you like?"). Set interestCandidate appropriately or null.
-- For off-topic or unrelated questions (e.g. weather, sports, general knowledge, something outside Miami activities): respond like a friendly human. Say politely that you don't know about that or can't help with it, then ask what they'd like to explore in Miami. Example: "Sorry, I don't know much about that — I'm here to help you discover things to do in Miami. What would you like to explore? Food, beaches, movies, concerts?" Set interestCandidate to null.
-- For "thank you", "thanks", "bye", "goodbye": respond naturally (e.g. "You're welcome! Happy to help. Want more Miami ideas? Just tell me another thing you're into." or "Bye! Have a great time in Miami."). Set interestCandidate to null.
-- Always tailor your reply to what the user actually said. Never reply with a single repeated phrase for every message.
+Conversation style:
+- Sound friendly, warm, and natural. Use contractions and everyday language.
+- Reply length: as long as needed to answer well (a few sentences to a few paragraphs). For simple questions keep it short; for complex ones you can be more detailed.
+- Use context (their interests, your last message) when they refer to "it", "that", etc.
 
-IMPORTANT: You must always return a single JSON object (and nothing else) with this exact shape:
+Miami interests (only set interestCandidate when the user clearly mentions one of these):
+Food & dining, Beaches, Shopping, Mexican restaurants, Indian restaurants, Stand-up comedy, Movies, Water activities, Art, Concerts, Live jazz, Rooftop bars, Art galleries, Farmers markets
+
+Safety: Refuse harm, wrongdoing, or privacy invasion briefly; offer a safe alternative.
+
+IMPORTANT: Always return a single JSON object, nothing else:
 {
-  "reply": "string, the message you say to the user",
-  "interestCandidate": "string | null, a single concise interest category extracted from the user's latest message, or null if none is clear"
+  "reply": "string, your full reply to the user",
+  "interestCandidate": "string | null, one of the Miami categories above only if they mentioned it, else null"
 }
 
-Rules for "interestCandidate":
-- Base it on the MOST RECENT user message only.
-- Use one of: "Food & dining", "Beaches", "Shopping", "Mexican restaurants", "Stand-up comedy", "Movies", "Water activities", "Art", "Concerts", "Live jazz", "Rooftop bars", "Art galleries", "Farmers markets" (or a close variant the user said).
-- If the user mentions multiple ideas, pick the one that seems most actionable for going out in Miami.
-- If the message is ambiguous, use null.
-
 Current collected interests: ${JSON.stringify(interests)}
-${lastAssistantMessage ? `\nYour last message to the user (for context when they say "yes", "no", or short replies): "${lastAssistantMessage}"` : ""}
+${lastAssistantMessage ? `\nYour last message (for context): "${lastAssistantMessage}"` : ""}
 `;
 
   const userPrompt = `User message: ${message}
 
-Return ONLY the JSON object. No markdown, no explanation. Valid JSON only.`;
+Return ONLY the JSON object. No markdown, no code blocks, no extra text. Valid JSON only.`;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.5
-    })
-  });
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content || "";
-
-  let json = null;
-  try {
-    // Try to parse as pure JSON.
-    json = JSON.parse(content);
-  } catch {
-    // Fallback: attempt to extract JSON substring.
-    const start = content.indexOf("{");
-    const end = content.lastIndexOf("}");
-    if (start !== -1 && end !== -1 && end > start) {
-      try {
-        json = JSON.parse(content.slice(start, end + 1));
-      } catch {
-        // ignore
-      }
-    }
+  async function callAPI(extraInstruction = "") {
+    const finalUserPrompt = extraInstruction ? `${userPrompt}\n\n${extraInstruction}` : userPrompt;
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: finalUserPrompt }
+        ],
+        temperature: 0.5
+      })
+    });
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    return { response, data, content };
   }
 
-  if (!json || typeof json.reply !== "string") {
+  let result = await callAPI();
+  let { response, data, content } = result;
+
+  if (!response.ok) {
+    console.error(`[HelloCity] ${provider} API error:`, response.status, data?.error?.message || data?.error || data);
     return {
       reply: getConversationalFallback(message),
       interestCandidate: null
     };
   }
 
+  function parseReply(content) {
+    let json = null;
+    try {
+      json = JSON.parse(content);
+    } catch {
+      const start = content.indexOf("{");
+      const end = content.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
+        try {
+          json = JSON.parse(content.slice(start, end + 1));
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return json && typeof json.reply === "string" ? json : null;
+  }
+
+  let json = parseReply(content);
+  if (!json) {
+    result = await callAPI("Important: Reply with ONLY a single JSON object, nothing else. No markdown fences.");
+    if (result.response.ok) {
+      content = result.content;
+      json = parseReply(content);
+    }
+  }
+
+  if (!json || typeof json.reply !== "string") {
+    console.log("[HelloCity] API returned invalid/unparseable JSON — using fallback");
+    return {
+      reply: getConversationalFallback(message),
+      interestCandidate: null
+    };
+  }
+
+  console.log("[HelloCity] Response from: LLM (" + provider + ")");
   return {
     reply: json.reply,
     interestCandidate:
       typeof json.interestCandidate === "string" ? json.interestCandidate : null
+  };
+}
+
+// --- Tool: search_places (LLM passes whatever the user asked for as the search query)
+const SEARCH_PLACES_TOOL = {
+  type: "function",
+  function: {
+    name: "search_places",
+    description: "Get 3 Miami place suggestions. Call this when the user says what they want to do or find in Miami (e.g. indian cuisine, sushi, vegan cafe, beach, jazz club). Pass a short search query that describes exactly what they want — use their words or a natural search phrase, not a fixed list.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Short search query for places in Miami, e.g. 'indian restaurant', 'sushi', 'vegan cafe', 'beach', 'jazz club', 'rooftop bar'. Use whatever the user asked for."
+        }
+      },
+      required: ["query"]
+    }
+  }
+};
+
+function runSearchPlacesTool(query) {
+  const q = (query || "").trim() || "things to do";
+  const apiKeyFoursquare = process.env.FOURSQUARE_API_KEY;
+  const apiKeyGoogle = process.env.GOOGLE_PLACES_API_KEY;
+
+  if (apiKeyFoursquare) {
+    return fetchPlacesFromFoursquare(q).then(async (places) => {
+      if (places.length > 0) return places;
+      if (apiKeyGoogle) {
+        const googlePlaces = await fetchPlacesFromGoogle(q);
+        if (googlePlaces.length > 0) return googlePlaces;
+      }
+      return findExamplesForInterest(q);
+    });
+  }
+  if (apiKeyGoogle) {
+    return fetchPlacesFromGoogle(q).then((places) => {
+      if (places.length > 0) return places;
+      return findExamplesForInterest(q);
+    });
+  }
+  return Promise.resolve(findExamplesForInterest(q));
+}
+
+/**
+ * Flow: load history → build messages → call LLM → if tool_calls then run tool →
+ * add tool results → call LLM again → return reply + examples.
+ * Uses OpenAI/Groq chat completions with tools. Returns { reply, interestCandidate, examples }.
+ */
+async function callLLMWithTools({ apiUrl, apiKey, model, systemPrompt, messages, interests }) {
+  const maxToolRounds = 3;
+  let currentMessages = [...messages];
+  let lastInterestFromTool = null;
+  let examplesFromTool = [];
+
+  for (let round = 0; round < maxToolRounds; round++) {
+    const body = {
+      model,
+      messages: [{ role: "system", content: systemPrompt }, ...currentMessages],
+      temperature: 0.5,
+      tools: [SEARCH_PLACES_TOOL],
+      tool_choice: "auto"
+    };
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("[HelloCity] LLM API error:", response.status, data?.error?.message || data?.error);
+      return { reply: null, interestCandidate: null, examples: [], error: true };
+    }
+
+    const choice = data?.choices?.[0];
+    const msg = choice?.message;
+    if (!msg) {
+      return { reply: null, interestCandidate: null, examples: [], error: true };
+    }
+
+    const content = msg.content || "";
+    const toolCalls = msg.tool_calls;
+
+    if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
+      currentMessages.push({
+        role: "assistant",
+        content: content || null,
+        tool_calls: toolCalls
+      });
+      for (const tc of toolCalls) {
+        const id = tc.id;
+        const name = tc.function?.name;
+        const args = (() => {
+          try {
+            return JSON.parse(tc.function?.arguments || "{}");
+          } catch {
+            return {};
+          }
+        })();
+        if (name === "search_places") {
+          const places = await runSearchPlacesTool(args.query);
+          lastInterestFromTool = args.query || lastInterestFromTool;
+          examplesFromTool = places;
+          currentMessages.push({
+            role: "tool",
+            tool_call_id: id,
+            content: JSON.stringify(places)
+          });
+        }
+      }
+      continue;
+    }
+
+    return {
+      reply: content,
+      interestCandidate: lastInterestFromTool,
+      examples: examplesFromTool,
+      error: false
+    };
+  }
+
+  return {
+    reply: currentMessages.length ? "Here are some Miami ideas for you." : null,
+    interestCandidate: lastInterestFromTool,
+    examples: examplesFromTool,
+    error: false
   };
 }
 
@@ -626,7 +966,10 @@ app.post("/api/session/start", (req, res) => {
   sessions[sessionId] = {
     interests: [],
     completed: false,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    messages: [
+      { role: "assistant", content: "Hi, I'm Hello 👋 I'll help you discover great things to do in Miami. Tell me what you're into — food, beaches, shopping, stand-up comedy, movies, water activities, art, concerts, live music, or anything else you love doing in the city." }
+    ]
   };
 
   res.json({
@@ -667,29 +1010,97 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
     ? `User feedback: ${feedback === "yes" ? "Yes, that matched what I meant." : "No, that wasn’t quite right."}`
     : "";
 
+  // Ensure message history exists (e.g. old sessions)
+  if (!Array.isArray(session.messages)) {
+    session.messages = [
+      { role: "assistant", content: "Hi, I'm Hello 👋 I'll help you discover great things to do in Miami. Tell me what you're into — food, beaches, shopping, stand-up comedy, movies, water activities, art, concerts, live music, or anything else you love doing in the city." }
+    ];
+  }
+
+  // Build messages for LLM: history + new user turn
+  const apiMessages = [
+    ...session.messages.map((m) => ({ role: m.role, content: m.content || "" })),
+    { role: "user", content: userText }
+  ];
+
+  const groqKey = process.env.GROQ_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const provider = groqKey ? "groq" : openaiKey ? "openai" : null;
+  const apiUrl = groqKey
+    ? "https://api.groq.com/openai/v1/chat/completions"
+    : "https://api.openai.com/v1/chat/completions";
+  const apiKey = groqKey || openaiKey;
+  const model = groqKey ? "llama-3.1-8b-instant" : "gpt-4.1-mini";
+
+  const systemPromptWithTools = `You are Hello, a friendly AI assistant and HelloCity guide for Miami.
+- Answer any question the user asks. Be warm and natural.
+- When the user mentions something they want to do or find in Miami (e.g. padel, indian food, sushi, beach, jazz club), you MUST call the search_places tool with a short search query (e.g. "padel courts Miami", "indian restaurant", "sushi"). Do NOT write the query or any JSON in your message — only use the tool. The app will fetch places and show them as cards automatically. After the tool runs, reply with one short, friendly sentence (e.g. "Here are some spots in Miami!" or "Found a few ideas for you."). Never include {"query":"..."} or any technical text in your reply.
+- If the tool returns no places, say briefly that you couldn't find any and suggest trying something else. Plain text only.
+- For non-Miami or general chat, do not call the tool; just reply in plain text.
+- Your reply to the user must always be plain text only: no JSON, no code, no {"query":...}, no diagnostic output.
+Current collected interests: ${JSON.stringify(session.interests)}`;
+
   let reply;
   let llmInterest = null;
-  try {
-    const result = await callLLM({
-      message: userText,
-      interests: session.interests,
-      lastAssistantMessage: session.lastAssistantMessage || null
+  let examples = [];
+  let usedToolPath = false;
+
+  if (provider) {
+    const result = await callLLMWithTools({
+      apiUrl,
+      apiKey,
+      model,
+      systemPrompt: systemPromptWithTools,
+      messages: apiMessages,
+      interests: session.interests
     });
-    reply = result.reply;
-    llmInterest = result.interestCandidate;
-  } catch (err) {
-    console.error("HelloCity LLM error:", err);
-    const fallbackInterest = extractInterestHeuristically(userText);
-    if (fallbackInterest) {
-      llmInterest = fallbackInterest;
-      const fallbackExamples = findExamplesForInterest(fallbackInterest);
-      reply = (INTEREST_REPLIES[fallbackInterest] && fallbackExamples.length > 0)
-        ? INTEREST_REPLIES[fallbackInterest]
-        : fallbackExamples.length > 0
-          ? "Nice — " + fallbackInterest + " is a great pick for Miami. Here are some ideas. Do any of these match what you had in mind?"
-          : "I'm having a quick hiccup, but I heard you're into " + fallbackInterest + ". Try again in a moment and I'll find some Miami ideas for you!";
-    } else {
-      reply = getConversationalFallback(userText);
+    if (!result.error && result.reply) {
+      reply = result.reply;
+      llmInterest = result.interestCandidate;
+      examples = result.examples || [];
+      usedToolPath = true;
+      // If the LLM replied but didn't call the tool (or tool returned nothing), try fetching places from the user's message
+      if (examples.length === 0 && userText.trim().length > 0 && !isGreetingOrSmallTalk(userText)) {
+        const derivedQuery = deriveSearchQueryFromMessage(userText);
+        if (derivedQuery) examples = await runSearchPlacesTool(derivedQuery);
+      }
+      // Remove any raw JSON leaked into the reply (e.g. {"query":"..."}) so the user never sees it
+      reply = reply.replace(/\s*\{\s*"query"\s*:\s*"[^"]*"\s*\}\s*/g, "").trim();
+      if (!reply) reply = "Here are some ideas for you.";
+      // Save messages: append user turn + assistant reply
+      session.messages.push({ role: "user", content: userText });
+      session.messages.push({ role: "assistant", content: reply });
+    }
+  }
+
+  if (reply == null) {
+    try {
+      const result = await callLLM({
+        message: userText,
+        interests: session.interests,
+        lastAssistantMessage: session.lastAssistantMessage || null
+      });
+      reply = result.reply;
+      llmInterest = result.interestCandidate;
+      if (llmInterest) examples = findExamplesForInterest(llmInterest);
+      session.messages.push({ role: "user", content: userText });
+      session.messages.push({ role: "assistant", content: reply });
+    } catch (err) {
+      console.error("[HelloCity] LLM call threw:", err.message || err);
+      const fallbackInterest = extractInterestHeuristically(userText);
+      if (fallbackInterest) {
+        llmInterest = fallbackInterest;
+        examples = findExamplesForInterest(fallbackInterest);
+        reply = (INTEREST_REPLIES[fallbackInterest] && examples.length > 0)
+          ? INTEREST_REPLIES[fallbackInterest]
+          : examples.length > 0
+            ? "Nice — " + fallbackInterest + " is a great pick for Miami. Here are some ideas. Do any of these match what you had in mind?"
+            : "I'm having a quick hiccup, but I heard you're into " + fallbackInterest + ". Try again in a moment and I'll find some Miami ideas for you!";
+      } else {
+        reply = getConversationalFallback(userText);
+      }
+      session.messages.push({ role: "user", content: userText });
+      session.messages.push({ role: "assistant", content: reply });
     }
   }
 
@@ -697,7 +1108,6 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
     llmInterest || extractInterestHeuristically(userText);
 
   let newInterest = null;
-  let examples = [];
 
   if (interestCandidate) {
     const normalizedCandidate = normalizeInterest(interestCandidate);
@@ -708,8 +1118,11 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
       session.interests.push(interestCandidate);
       newInterest = interestCandidate;
     }
-    // Always return examples for this interest so the UI keeps showing the cards (and Yes/No).
-    examples = findExamplesForInterest(interestCandidate);
+    // Only fill cards from catalog when we did NOT use the tool path (e.g. no API key).
+    // When the LLM was used with tools, cards come only from the tool — never from backend JSON/catalog.
+    if (!usedToolPath && examples.length === 0) {
+      examples = findExamplesForInterest(interestCandidate);
+    }
   }
 
   if (session.interests.length >= 3) {
@@ -735,10 +1148,17 @@ app.post("/api/session/:sessionId/message", async (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    llmConfigured: !!(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY),
+    provider: process.env.GROQ_API_KEY ? "groq" : process.env.OPENAI_API_KEY ? "openai" : null
+  });
 });
 
 app.listen(port, () => {
+  const groq = !!process.env.GROQ_API_KEY;
+  const openai = !!process.env.OPENAI_API_KEY;
   console.log(`HelloCity backend listening on http://localhost:${port}`);
+  console.log(`LLM: ${groq ? "Groq" : openai ? "OpenAI" : "none (set GROQ_API_KEY or OPENAI_API_KEY in server/.env)"}`);
 });
 

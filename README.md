@@ -11,13 +11,23 @@ Quick start (run locally)
 cd server
 npm install
 
-Set your OpenAI API key. Easiest: create a file server/.env with:
+Set your LLM API key (use one). Easiest: create a file server/.env with:
+
+**Option A – Groq (free tier, recommended)**  
+Get a key at https://console.groq.com then add:
+
+GROQ_API_KEY=your-groq-key-here
+
+**Option B – OpenAI**  
+Get a key at https://platform.openai.com/api-keys then add:
 
 OPENAI_API_KEY=sk-your-actual-key-here
 
-(Get a key at https://platform.openai.com/api-keys)
+(Groq is preferred when both are set.)
 
-Or set it in the shell before starting (PowerShell): $env:OPENAI_API_KEY="sk-your-key-here"
+**Optional – Live Miami places:** Add `FOURSQUARE_API_KEY` to `server/.env` to fetch venues from Foursquare instead of the static catalog. See [PLACES_API_GUIDE.md](PLACES_API_GUIDE.md) for step-by-step setup.
+
+Or set it in the shell before starting (PowerShell): $env:GROQ_API_KEY="your-groq-key" or $env:OPENAI_API_KEY="sk-your-key-here"
 
 Start the server:
 
@@ -49,7 +59,7 @@ Stack
 
 Backend  - Node.js, Express, in-memory session store
 Frontend - React, TypeScript, Vite
-LLM      - OpenAI API (gpt-4.1-mini) for conversation + interest extraction
+LLM      - Groq (llama-3.1-8b-instant) or OpenAI (gpt-4.1-mini) for conversation + interest extraction; Groq preferred if GROQ_API_KEY is set
 Fallback - Keyword-based interest extraction when no API key or when LLM doesn't return an interest
 
 
@@ -108,7 +118,7 @@ Frontend:
 - Single warm theme (cream/peach/amber).
 
 Config:
-- Backend: PORT, OPENAI_API_KEY (in server/.env or environment).
+- Backend: PORT, GROQ_API_KEY and/or OPENAI_API_KEY (in server/.env or environment).
 - Frontend: VITE_API_BASE_URL (default http://localhost:4000 for local dev).
 
 
@@ -122,7 +132,7 @@ Next steps to update the code
    git commit -m "Your message"
    git push origin main
    ```
-3. **Deploy** — If you use a host (e.g. Vercel + Render), push triggers a new build. Set `OPENAI_API_KEY` and `VITE_API_BASE_URL` in the host's environment.
+3. **Deploy** — If you use a host (e.g. Vercel + Render), push triggers a new build. Set `GROQ_API_KEY` or `OPENAI_API_KEY` and `VITE_API_BASE_URL` in the host's environment.
 4. **Optional later** — Persist sessions (e.g. Redis/DB) for production; add rate limiting if you expose the API publicly.
 
 
@@ -142,7 +152,7 @@ HelloCity/
 
 Deploying
 
-- Backend: e.g. Render/Railway – root server, start node index.js, set OPENAI_API_KEY and PORT.
-- Frontend: e.g. Vercel – root client, build npm run build, output dist, set VITE_API_BASE_URL to your backend URL.
+See **[DEPLOY.md](DEPLOY.md)** for step-by-step instructions (Render + Vercel, or Railway + Vercel).
 
-After deploy, open the frontend URL; the app will call your backend for sessions and messages.
+- Backend: e.g. Render/Railway – root or `server` directory, start `node index.js`, set `GROQ_API_KEY` or `OPENAI_API_KEY` and `PORT`.
+- Frontend: e.g. Vercel – set **Root Directory** to `client`, build `npm run build`, output `dist`, set **`VITE_API_BASE_URL`** to your backend URL (required).
